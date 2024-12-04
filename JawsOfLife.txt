@@ -1,0 +1,88 @@
+Content-Type: multipart/mixed; boundary="//"
+MIME-Version: 1.0
+
+--//
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="cloud-config.txt"
+
+#cloud-config
+cloud_final_modules:
+- [scripts-user, always]
+
+--//
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="userdata.txt"
+
+#!/bin/bash
+
+#USER CONFIGURABLE VALUES
+#
+#In the variables below, the user variable is dependent on the OS. This is the user that you would use to login via SSH
+#If you put a value into sshpubkey, then it will either append this public key to the authorized keys file, or replace
+#the content of the authorized_keys file with this public key, dependent on whether the 'replace' variable is set to 1 or not
+#Finally, the flush_firewall will merely flush the running firewall on a Run or Start instance, not disable any utils that
+# set the firewall in the first place. So a restart of that utility, or a standard reboot will reactivate any firewall rules.
+#
+user='ec2-user'
+sshpubkey=''
+replace=0 
+flush_firewall=0
+
+echo "CHECKING ALL PERMISSIONS"
+ls -Al
+ls -Al /home
+ls -Al /home/$user
+if [ -d /home/$user/.ssh ]
+then 
+	ls -Al /home/$user/.ssh
+else
+	mkdir -p /home/$user/.ssh
+	echo ".ssh folder was missing. Created it"
+fi
+if [ -f /home/$user/.ssh/authorized_keys ] 
+then 
+	cat /home/$user/.ssh/authorized_keys 
+else
+	touch /home/$user/.ssh/authorized_keys; 
+	echo "No Key file was present. File created. If sshpubkey is present, it will add it to the file"
+fi
+ls -Al /etc
+ls -Al /etc/ssh
+ls -Al /var/empty/sshd
+echo "CHECKING IF PUBLIC KEY CHANGES ARE TO OCCUR"
+if [ ${#sshpubkey} -gt 0 ]
+then
+	if [ "$replace" -eq 0 ]
+	then
+		echo $sshpubkey > /home/$user/.ssh/authorized_keys
+	else
+		echo $sshpubkey >> /home/$user/.ssh/authorized_keys
+	fi
+fi
+echo "APPLYING DEFAULT PERMISSIONS BACK"
+chown root:root /etc/ssh -R
+chown root:ssh_keys /etc/ssh/ssh_host_ed25519_key
+chmod 600 /etc/ssh/*
+chmod 644 /etc/ssh/*.pub
+chmod 640 /etc/ssh/ssh_host_ed25519_key
+chown root:root /home
+chmod 755 /home
+chown $user:$user /home/$user -R
+chmod 700 /home/$user
+chmod 700 /home/$user/.ssh
+chmod 600 /home/$user/.ssh/authorized_keys
+chown root:root /var/empty/sshd
+chmod 711 /var/empty/sshd
+chmod 440 /etc/sudoers
+echo "RESTARTING SSH DAEMON"
+if [ "flush_firewall" -eq 0 ]
+then
+	iptables -F
+fi
+systemctl restart sshd
+service sshd restart
+--//
